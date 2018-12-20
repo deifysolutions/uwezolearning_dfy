@@ -1,0 +1,68 @@
+{
+    "name": "Uwezo Learning",
+    "id": "uwezo",
+    "packaging_format": 1,
+    "description": {
+        "en": "Uwezo Learning Solution and Portal."
+    },
+    "version": "4.0",
+    "url": "http://www.deifysolutions.com",
+    "license": "free",
+    "maintainer": {
+		"name": "Deify Infocomm Solutions",
+		"email": "support@deifysolutions.com"
+    },
+    "requirements": {
+        "yunohost": ">= 2.7.2"
+    },
+    "multi_instance": true,
+    "services": [
+        "nginx",
+        "php7.1-fpm"
+    ],
+    "arguments": {
+        "install" : [
+            {
+                "name": "domain",
+                "type": "domain",
+                "ask": {
+                    "en": "Choose a domain name for the App"
+                },
+                "example": "example.com"
+            },
+            {
+                "name": "path",
+                "type": "path",
+                "ask": {
+                    "en": "Choose a path for the App"
+                },
+                "example": "/corporate",
+                "default": "/"
+            },
+	    {
+		"name": "admin",
+		"type": "user",
+		"ask": {
+		    "en": "Choose the Ibeads user"
+		},
+		"example": "devadmin"
+	    },
+	    {
+		"name": "sql",
+		"type": "boolean",
+		"ask": {
+		    "en": "Create a database?"
+		},
+		"default": true
+	    },	    
+            {
+                "name": "is_public",
+                "type": "boolean",
+                "ask": {
+                    "en": "Is it a public application?"
+                },
+                "default": true
+            }
+        ]
+    }
+}
