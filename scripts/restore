@@ -1,0 +1,117 @@
+#!/bin/bash
+
+#=================================================
+# GENERIC START
+#=================================================
+# MANAGE SCRIPT FAILURE
+#=================================================
+
+# Exit on command errors and treat access to unset variables as an error
+set -eu
+
+#=================================================
+# IMPORT GENERIC HELPERS
+#=================================================
+
+source /usr/share/yunohost/helpers
+
+#=================================================
+# LOAD SETTINGS
+#=================================================
+
+app=$YNH_APP_INSTANCE_NAME
+
+domain=$(ynh_app_setting_get $app domain)
+path_url=$(ynh_app_setting_get $app path)
+final_path=$(ynh_app_setting_get $app final_path)
+db_name=$(ynh_app_setting_get $app db_name)
+with_mysql=$(ynh_app_setting_get $app with_mysql)
+password=$(ynh_app_setting_get $app password)
+user=$(ynh_app_setting_get $app user)
+
+#=================================================
+# CHECK IF THE APP CAN BE RESTORED
+#=================================================
+
+ynh_webpath_available $domain $path_url \
+	|| ynh_die "Path not available: ${domain}${path_url}"
+test ! -d $final_path \
+	|| ynh_die "There is already a directory: $final_path "
+
+#=================================================
+# STANDARD RESTORATION STEPS
+#=================================================
+# RESTORE THE NGINX CONFIGURATION
+#=================================================
+
+ynh_restore_file "/etc/nginx/conf.d/$domain.d/$app.conf"
+
+#=================================================
+# RESTORE THE APP MAIN DIR
+#=================================================
+
+ynh_restore_file "$final_path"
+
+#=================================================
+# RESTORE THE MYSQL DATABASE
+#=================================================
+
+if [ $with_mysql -eq 1 ]; then
+    db_pwd=$(ynh_app_setting_get $app mysqlpwd)
+    ynh_mysql_setup_db $db_name $db_name $db_pwd
+    ynh_mysql_connect_as $db_name $db_pwd $db_name < ./db.sql
+fi
+
+#=================================================
+# RECREATE THE DEDICATED USER
+#=================================================
+
+# Create a standard user (not a system user for sftp)
+ynh_system_user_exists "$user" || \
+    useradd -d "$final_path" -M --user-group "$user"
+# Add the password to this user
+chpasswd <<< "${user}:${password}"
+
+#=================================================
+# RESTORE USER RIGHTS
+#=================================================
+
+# Restore permissions on app files
+chown -R $user: "$final_path"
+# Home directory of the user need to be owned by root to allow
+# SFTP connections
+chown root: "$final_path"
+
+#=================================================
+# RESTORE THE PHP-FPM CONFIGURATION
+#=================================================
+
+ynh_restore_file "/etc/php/5.6/fpm/pool.d/$app.conf"
+
+#=================================================
+# SPECIFIC RESTORATION
+#=================================================
+# CONFIGURE SSH
+#=================================================
+
+# Harden SSH connection for the user
+echo "##-> ${app}
+# Hardening user connection
+Match User ${user}
+  ChrootDirectory %h
+  ForceCommand internal-sftp
+  AllowTcpForwarding no
+  PermitTunnel no
+  X11Forwarding no
+##<- ${app}" | tee -a /etc/ssh/sshd_config >/dev/null
+
+systemctl reload ssh
+
+#=================================================
+# GENERIC FINALIZATION
+#=================================================
+# RELOAD NGINX AND PHP-FPM
+#=================================================
+
+systemctl reload php5-fpm
+systemctl reload nginx
